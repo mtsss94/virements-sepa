@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Générateur de virements SEPA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f2330; --border:#2a2f3d;
+    --text:#e8eaf0; --muted:#9aa1b2; --accent:#e6194b; --accent2:#ff4d6d;
+    --ok:#2ecc71; --warn:#f5a623;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding:32px 20px 80px;
+  }
+  .wrap{max-width:1000px;margin:0 auto;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:28px;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:20px; margin-bottom:20px;
+  }
+  .card h2{font-size:15px;margin:0 0 14px;color:var(--text);display:flex;align-items:center;gap:8px;justify-content:space-between;}
+  .card h2 .left{display:flex;align-items:center;gap:8px;}
+  .badge{
+    background:var(--accent); color:#fff; border-radius:20px; width:20px;height:20px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;
+  }
+  label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;margin-top:12px;}
+  label:first-child{margin-top:0;}
+  input[type=text], input[type=date], input[type=email], input[type=password], textarea, select{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:9px 10px; font-size:14px; font-family:inherit;
+  }
+  input:focus, textarea:focus, select:focus{outline:none;border-color:var(--accent);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .row3{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:10px;align-items:end;}
+  textarea{min-height:120px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5;}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .hint code{background:var(--panel2);padding:1px 5px;border-radius:4px;}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;}
+  th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.02em;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .status{font-size:12px;padding:2px 8px;border-radius:20px;display:inline-block;white-space:nowrap;}
+  .status.ok{background:rgba(46,204,113,.15);color:var(--ok);}
+  .status.err{background:rgba(230,25,75,.15);color:var(--accent2);}
+  .status.warn{background:rgba(245,166,35,.15);color:var(--warn);}
+  button{
+    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer;
+  }
+  button:hover{background:var(--accent2);}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  button.secondary{background:var(--panel2);border:1px solid var(--border);color:var(--text);}
+  button.small{padding:6px 10px;font-size:12.5px;font-weight:500;}
+  button.icon{background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 10px;font-size:12px;}
+  button.icon:hover{background:var(--panel2);color:var(--text);}
+  .actions{display:flex; gap:10px; align-items:center; margin-top:18px;flex-wrap:wrap;}
+  .summary{display:flex;gap:24px;margin-top:14px;font-size:13px;color:var(--muted);}
+  .summary b{color:var(--text);font-size:16px;display:block;}
+  .msg{font-size:13px;padding:10px 12px;border-radius:8px;margin-top:14px;}
+  .msg.err{background:rgba(230,25,75,.1);color:var(--accent2);border:1px solid rgba(230,25,75,.3);}
+  .msg.ok{background:rgba(46,204,113,.1);color:var(--ok);border:1px solid rgba(46,204,113,.3);}
+  .msg.warn{background:rgba(245,166,35,.1);color:var(--warn);border:1px solid rgba(245,166,35,.3);}
+  .footer-note{font-size:12px;color:var(--muted);margin-top:24px;line-height:1.6;}
+  .empty{color:var(--muted);font-size:13px;padding:14px 0;text-align:center;}
+  .loading{color:var(--muted);font-size:13px;}
+  .save-state{font-size:11.5px;color:var(--muted);margin-top:6px;}
+  .inline-select{display:flex;gap:6px;align-items:center;}
+  .tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);}
+  .tab{background:transparent;border:none;color:var(--muted);font-size:14px;font-weight:500;padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;border-radius:0;}
+  .tab:hover{color:var(--text);background:transparent;}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent);}
+  .tab-count{background:var(--panel2);color:var(--muted);font-size:11px;padding:1px 7px;border-radius:20px;margin-left:6px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .topbar .who{font-size:12.5px;color:var(--muted);}
+  .login-wrap{max-width:380px;margin:80px auto;}
+  .login-wrap h1{font-size:20px;text-align:center;}
+  .login-wrap .sub{text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginScreen">
+  <h1>Générateur de virements SEPA</h1>
+  <div class="sub">Connexion requise pour accéder à l'annuaire fournisseurs.</div>
+  <div class="card">
+    <label>Email</label>
+    <input type="email" id="loginEmail" placeholder="ton@email.com">
+    <label>Mot de passe</label>
+    <input type="password" id="loginPassword" placeholder="••••••••">
+    <div class="actions">
+      <button onclick="login()" id="loginBtn">Se connecter</button>
+    </div>
+    <div id="loginMsg"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appContent" style="display:none;">
+  <div class="topbar">
+    <div>
+      <h1>Générateur de virements SEPA (pain.001)</h1>
+      <div class="sub">Ton annuaire fournisseurs (IBAN) est enregistré dans ta base Supabase. À chaque cycle, colle juste les noms et montants.</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="who" id="whoAmI"></div>
+      <button class="icon small" onclick="logout()">Se déconnecter</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tabBtn-compte" onclick="showTab('compte')">Compte</button>
+    <button class="tab" id="tabBtn-fournisseurs" onclick="showTab('fournisseurs')">Fournisseurs<span class="tab-count" id="supplierCountBadge"></span></button>
+    <button class="tab" id="tabBtn-virements" onclick="showTab('virements')">Virements</button>
+  </div>
+
+  <div class="tab-panel" id="tabPanel-compte">
+  <div class="card">
+    <h2><span class="left"><span class="badge">1</span> Compte donneur d'ordre (le tien)</span></h2>
+    <div class="row2">
+      <div>
+        <label>Nom du titulaire / raison sociale</label>
+        <input type="text" id="dbtrName" placeholder="Ex : SOUTO SARL">
+      </div>
+      <div>
+        <label>Date d'exécution souhaitée</label>
+        <input type="date" id="execDate">
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <label>IBAN de ton compte</label>
+        <input type="text" id="dbtrIban" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX">
+      </div>
+      <div>
+        <label>BIC de ton compte (Société Générale)</label>
+        <input type="text" id="dbtrBic" placeholder="SOGEFRPP">
+      </div>
+    </div>
+    <div class="save-state" id="dbtrSaveState"></div>
+  </div>
+  </div>
+
+  <div class="tab-panel" id="tabPanel-fournisseurs" style="display:none;">
+  <div class="card">
+    <h2><span class="left"><span class="badge">2</span> Annuaire fournisseurs</span></h2>
+    <div id="annuaireLoading" class="loading">Chargement de l'annuaire…</div>
+    <div id="annuaireWrap" style="display:none;">
+      <div class="row3" style="margin-bottom:14px;grid-template-columns:1fr auto;">
+        <div><label>Rechercher</label><input type="text" id="supplierSearch" placeholder="Filtrer par nom..." oninput="renderAnnuaire()"></div>
+        <div><label>&nbsp;</label><span class="save-state" id="supplierCountLabel" style="white-space:nowrap;"></span></div>
+      </div>
+      <table id="annuaireTable"><thead><tr><th>Nom fournisseur</th><th>IBAN</th><th>BIC</th><th></th></tr></thead><tbody id="annuaireBody"></tbody></table>
+      <div id="annuaireEmpty" class="empty" style="display:none;">Aucun fournisseur enregistré pour le moment.</div>
+      <div class="row3" style="margin-top:14px;">
+        <div><label>Nouveau fournisseur</label><input type="text" id="newName" placeholder="Nom"></div>
+        <div><label>IBAN</label><input type="text" id="newIban" placeholder="FR76..."></div>
+        <div><label>BIC (facultatif)</label><input type="text" id="newBic" placeholder="SOGEFRPP"></div>
+        <div><button class="small" onclick="addSupplier()">Ajouter</button></div>
+      </div>
+      <div id="annuaireMsg"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="tab-panel" id="tabPanel-virements" style="display:none;">
+  <div class="card">
+    <h2><span class="left"><span class="badge">3</span> Virements de ce cycle</span></h2>
+    <label>Référence globale (facultatif) — si remplie, elle remplace la référence de tous les virements ci-dessous</label>
+    <input type="text" id="globalRef" placeholder="Ex : Décade 2, ou Virement 15/09/2026">
+    <label>Colle : nom du fournisseur ; montant ; référence (facultatif) — pas besoin de l'IBAN</label>
+    <textarea id="rawList" placeholder="Fournisseur A;450.00;Facture 1023
+Fournisseur B;1200.50;Réf commande 88"></textarea>
+    <div class="hint">Format : <code>nom ; montant ; référence</code>. Colle directement depuis Excel (tabulation) ou CSV (point-virgule). Le nom doit correspondre à un fournisseur de l'annuaire (onglet Fournisseurs) — sinon tu pourras le rattacher ou l'ajouter. Laisse la référence globale vide pour garder les références individuelles collées ligne par ligne.</div>
+    <div class="actions">
+      <button class="secondary" onclick="parseList()">Analyser la liste</button>
+    </div>
+    <div id="parseMsg"></div>
+    <div id="tableWrap"></div>
+  </div>
+
+  <div class="card" id="genCard" style="display:none;">
+    <h2><span class="left"><span class="badge">4</span> Générer le fichier</span></h2>
+    <div class="summary">
+      <div><b id="sumCount">0</b>virements</div>
+      <div><b id="sumTotal">0,00 €</b>montant total</div>
+    </div>
+    <div class="actions">
+      <button onclick="generateXml()">Télécharger le fichier SEPA (.xml)</button>
+    </div>
+    <div id="genMsg"></div>
+  </div>
+  </div>
+
+  <div class="footer-note">
+    Le fichier généré suit le format ISO 20022 pain.001.001.03, standard pour l'import de virements multiples chez Société Générale. L'annuaire fournisseurs et les infos du compte donneur d'ordre sont stockés dans ta base Supabase, protégés par Row Level Security : seul ton compte connecté peut les lire ou les modifier.
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://klzyobbywztphqkqugjy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsenlvYmJ5d3p0cGhxa3F1Z2p5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MjMyNTUsImV4cCI6MjEwNDE5OTI1NX0._-mAyV3DLiygWbOf4x55iUQcZdOH9U9oomlsNJAtJZo';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let suppliers = [];
+let parsedRows = [];
+let matchOverrides = {};
+
+document.getElementById('execDate').valueAsDate = new Date(Date.now() + 24*3600*1000);
+
+function cleanIban(s){ return (s||'').replace(/\s+/g,'').toUpperCase(); }
+function isValidIban(iban){ return /^[A-Z]{2}[0-9A-Z]{13,32}$/.test(iban); }
+function normName(s){ return (s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function xmlEscape(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
+function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function pad(n){ return n.toString().padStart(2,'0'); }
+function isoNow(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function genMsgId(){ return 'VIR'+Date.now(); }
+
+function showTab(name){
+  ['compte','fournisseurs','virements'].forEach(t=>{
+    document.getElementById('tabPanel-'+t).style.display = (t===name) ? 'block' : 'none';
+    document.getElementById('tabBtn-'+t).classList.toggle('active', t===name);
+  });
+}
+
+// ---------- AUTH ----------
+
+async function initAuth(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(session){
+    currentUser = session.user;
+    await showApp();
+  } else {
+    showLogin();
+  }
+}
+
+function showLogin(){
+  document.getElementById('loginScreen').style.display = 'block';
+  document.getElementById('appContent').style.display = 'none';
+}
+
+async function showApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  document.getElementById('whoAmI').textContent = currentUser.email;
+  ['dbtrName','dbtrIban','dbtrBic'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', saveDebtor);
+  });
+  document.getElementById('execDate').addEventListener('change', saveDebtor);
+  document.getElementById('globalRef').addEventListener('input', ()=>{ if(parsedRows.length>0) renderTable(); });
+  await loadDebtor();
+  await loadSuppliers();
+}
+
+async function login(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msgEl = document.getElementById('loginMsg');
+  const btn = document.getElementById('loginBtn');
+  if(!email || !password){
+    msgEl.innerHTML = '<div class="msg err">Renseigne ton email et ton mot de passe.</div>';
+    return;
+  }
+  btn.disabled = true;
+  msgEl.innerHTML = '<div class="loading">Connexion…</div>';
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  if(error){
+    msgEl.innerHTML = `<div class="msg err">Échec de connexion : ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  currentUser = data.user;
+  msgEl.innerHTML = '';
+  await showApp();
+}
+
+async function logout(){
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  suppliers = [];
+  parsedRows = [];
+  showLogin();
+}
+
+// ---------- DONNEUR D'ORDRE ----------
+
+async function loadDebtor(){
+  const stateEl = document.getElementById('dbtrSaveState');
+  try{
+    const { data, error } = await supabaseClient
+      .from('donneur_ordre')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if(error) throw error;
+    if(data){
+      document.getElementById('dbtrName').value = data.name || '';
+      document.getElementById('dbtrIban').value = data.iban || '';
+      document.getElementById('dbtrBic').value = data.bic || '';
+    }
+  }catch(e){
+    stateEl.textContent = "Impossible de charger le compte donneur d'ordre.";
+  }
+}
+
+async function saveDebtor(){
+  const stateEl = document.getElementById('dbtrSaveState');
+  const payload = {
+    user_id: currentUser.id,
+    name: document.getElementById('dbtrName').value.trim(),
+    iban: cleanIban(document.getElementById('dbtrIban').value),
+    bic: document.getElementById('dbtrBic').value.trim().toUpperCase()
+  };
+  try{
+    const { error } = await supabaseClient.from('donneur_ordre').upsert(payload, { onConflict: 'user_id' });
+    if(error) throw error;
+    stateEl.textContent = 'Enregistré.';
+    setTimeout(()=>{ if(stateEl.textContent==='Enregistré.') stateEl.textContent=''; }, 2000);
+  }catch(e){
+    stateEl.textContent = "Échec de l'enregistrement : " + e.message;
+  }
+}
+
+// ---------- FOURNISSEURS ----------
+
+async function loadSuppliers(){
+  const loadingEl = document.getElementById('annuaireLoading');
+  try{
+    const { data, error } = await supabaseClient
+      .from('fournisseurs')
+      .select('*')
+      .order('name', { ascending: true });
+    if(error) throw error;
+    suppliers = data || [];
+  }catch(e){
+    suppliers = [];
+    document.getElementById('annuaireMsg').innerHTML = `<div class="msg err">Erreur de chargement : ${escapeHtml(e.message)}</div>`;
+  }
+  loadingEl.style.display = 'none';
+  document.getElementById('annuaireWrap').style.display = 'block';
+  renderAnnuaire();
+}
+
+function renderAnnuaire(){
+  const body = document.getElementById('annuaireBody');
+  const empty = document.getElementById('annuaireEmpty');
+  const searchEl = document.getElementById('supplierSearch');
+  const query = searchEl ? normName(searchEl.value) : '';
+
+  document.getElementById('supplierCountBadge').textContent = suppliers.length ? suppliers.length : '';
+  const countLabel = document.getElementById('supplierCountLabel');
+  if(countLabel) countLabel.textContent = suppliers.length + ' fournisseur(s) au total';
+
+  const filtered = query
+    ? suppliers.filter(s=>normName(s.name).includes(query))
+    : suppliers;
+
+  if(suppliers.length === 0){
+    body.innerHTML = '';
+    empty.textContent = 'Aucun fournisseur enregistré pour le moment.';
+    empty.style.display = 'block';
+    return;
+  }
+  if(filtered.length === 0){
+    body.innerHTML = '';
+    empty.textContent = 'Aucun fournisseur ne correspond à la recherche.';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  body.innerHTML = filtered.map(s=>`
+    <tr>
+      <td><input type="text" value="${escapeAttr(s.name)}" onchange="updateSupplier('${s.id}','name',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(s.iban)}" onchange="updateSupplier('${s.id}','iban',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(s.bic||'')}" onchange="updateSupplier('${s.id}','bic',this.value)"></td>
+      <td><button class="icon" onclick="removeSupplier('${s.id}')">Supprimer</button></td>
+    </tr>
+  `).join('');
+}
+
+async function updateSupplier(id, field, value){
+  if(field === 'iban') value = cleanIban(value);
+  if(field === 'bic') value = value.trim().toUpperCase();
+  const msgEl = document.getElementById('annuaireMsg');
+  try{
+    const { error } = await supabaseClient.from('fournisseurs').update({ [field]: value }).eq('id', id);
+    if(error) throw error;
+    const s = suppliers.find(x=>x.id===id);
+    if(s) s[field] = value;
+    msgEl.innerHTML = '<div class="msg ok">Fournisseur mis à jour.</div>';
+  }catch(e){
+    msgEl.innerHTML = `<div class="msg err">Échec de la mise à jour : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function removeSupplier(id){
+  const msgEl = document.getElementById('annuaireMsg');
+  try{
+    const { error } = await supabaseClient.from('fournisseurs').delete().eq('id', id);
+    if(error) throw error;
+    suppliers = suppliers.filter(s=>s.id!==id);
+    renderAnnuaire();
+  }catch(e){
+    msgEl.innerHTML = `<div class="msg err">Échec de la suppression : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function addSupplier(){
+  const name = document.getElementById('newName').value.trim();
+  const iban = cleanIban(document.getElementById('newIban').value);
+  const bic = document.getElementById('newBic').value.trim().toUpperCase();
+  const msgEl = document.getElementById('annuaireMsg');
+
+  if(!name || !isValidIban(iban)){
+    msgEl.innerHTML = '<div class="msg err">Nom et IBAN valide requis.</div>';
+    return;
+  }
+  try{
+    const { data, error } = await supabaseClient
+      .from('fournisseurs')
+      .insert({ name, iban, bic, user_id: currentUser.id })
+      .select()
+      .single();
+    if(error) throw error;
+    suppliers.push(data);
+    document.getElementById('newName').value = '';
+    document.getElementById('newIban').value = '';
+    document.getElementById('newBic').value = '';
+    renderAnnuaire();
+    msgEl.innerHTML = '<div class="msg ok">Fournisseur ajouté.</div>';
+  }catch(e){
+    msgEl.innerHTML = `<div class="msg err">Échec de l'ajout : ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ---------- VIREMENTS DU CYCLE ----------
+
+function effectiveRef(rowRef){
+  const g = document.getElementById('globalRef').value.trim();
+  return g ? g : rowRef;
+}
+
+function parseAmount(s){
+  if(!s) return NaN;
+  let v = s.trim().replace(/\s/g,'').replace(/€/g,'');
+  if(v.includes(',') && v.includes('.')){
+    if(v.lastIndexOf(',') > v.lastIndexOf('.')){ v = v.replace(/\./g,'').replace(',','.'); }
+    else { v = v.replace(/,/g,''); }
+  } else if(v.includes(',')){ v = v.replace(',','.'); }
+  return parseFloat(v);
+}
+
+function splitLine(line){
+  if(line.includes('\t')) return line.split('\t');
+  if(line.includes(';')) return line.split(';');
+  return line.split(',');
+}
+
+function findSupplier(name){
+  const n = normName(name);
+  return suppliers.find(s => normName(s.name) === n) || null;
+}
+
+function parseList(){
+  const raw = document.getElementById('rawList').value;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l.length>0);
+  parsedRows = [];
+  matchOverrides = {};
+
+  lines.forEach((line, idx) => {
+    const parts = splitLine(line).map(p=>p.trim());
+    if(parts.length < 2){
+      parsedRows.push({idx, name: line, amount: NaN, ref:'', error:'format incomplet (nom;montant attendu)'});
+      return;
+    }
+    const name = parts[0];
+    const amount = parseAmount(parts[1]);
+    const ref = parts[2] || '';
+    const match = findSupplier(name);
+
+    let error = null;
+    if(!name) error = 'nom manquant';
+    else if(isNaN(amount) || amount <= 0) error = 'montant invalide';
+    else if(!match) error = 'fournisseur non reconnu';
+
+    parsedRows.push({idx, name, amount, ref, match, error});
+  });
+
+  renderTable();
+}
+
+function renderTable(){
+  const msgDiv = document.getElementById('parseMsg');
+  const tableWrap = document.getElementById('tableWrap');
+
+  if(parsedRows.length === 0){
+    msgDiv.innerHTML = '<div class="msg err">Aucune ligne détectée. Colle ta liste puis clique sur "Analyser".</div>';
+    tableWrap.innerHTML = '';
+    document.getElementById('genCard').style.display = 'none';
+    return;
+  }
+
+  const unresolvedCount = parsedRows.filter(r=>r.error && r.error !== 'fournisseur non reconnu').length;
+  const unmatchedCount = parsedRows.filter(r=>r.error === 'fournisseur non reconnu' && !matchOverrides[r.idx]).length;
+
+  if(unresolvedCount > 0){
+    msgDiv.innerHTML = `<div class="msg err">${unresolvedCount} ligne(s) avec un problème de format ou de montant — corrige le texte puis relance l'analyse.</div>`;
+  } else if(unmatchedCount > 0){
+    msgDiv.innerHTML = `<div class="msg warn">${unmatchedCount} fournisseur(s) non reconnu(s) — rattache-les à un fournisseur existant ou ajoute-les dans l'onglet Fournisseurs avant de générer.</div>`;
+  } else {
+    msgDiv.innerHTML = `<div class="msg ok">${parsedRows.length} ligne(s) prêtes à générer.</div>`;
+  }
+
+  let html = '<table><thead><tr><th>Ligne</th><th>IBAN utilisé</th><th>Référence</th><th style="text-align:right">Montant</th><th>Statut</th></tr></thead><tbody>';
+  parsedRows.forEach(r=>{
+    let ibanCell, statusCell;
+    if(r.error && r.error !== 'fournisseur non reconnu'){
+      ibanCell = '—';
+      statusCell = `<span class="status err">${r.error}</span>`;
+    } else if(!r.match && !matchOverrides[r.idx]){
+      ibanCell = `<div class="inline-select"><select onchange="setOverride(${r.idx}, this.value)">
+        <option value="">— choisir —</option>
+        ${suppliers.map(s=>`<option value="${escapeAttr(s.name)}">${escapeHtml(s.name)}</option>`).join('')}
+      </select></div>`;
+      statusCell = '<span class="status warn">non reconnu</span>';
+    } else {
+      const s = matchOverrides[r.idx] ? findSupplier(matchOverrides[r.idx]) : r.match;
+      ibanCell = escapeHtml(s.iban);
+      statusCell = '<span class="status ok">OK</span>';
+    }
+    html += `<tr>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${ibanCell}</td>
+      <td>${escapeHtml(effectiveRef(r.ref))}</td>
+      <td class="num">${isNaN(r.amount)?'—':r.amount.toFixed(2).replace('.',',')+' €'}</td>
+      <td>${statusCell}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  tableWrap.innerHTML = html;
+
+  updateGenCard();
+}
+
+function setOverride(idx, name){
+  if(name){ matchOverrides[idx] = name; }
+  else { delete matchOverrides[idx]; }
+  renderTable();
+}
+
+function getResolvedRows(){
+  return parsedRows.filter(r=>{
+    if(r.error && r.error !== 'fournisseur non reconnu') return false;
+    const s = matchOverrides[r.idx] ? findSupplier(matchOverrides[r.idx]) : r.match;
+    return !!s;
+  }).map(r=>{
+    const s = matchOverrides[r.idx] ? findSupplier(matchOverrides[r.idx]) : r.match;
+    return {name: s.name, iban: s.iban, amount: r.amount, ref: effectiveRef(r.ref)};
+  });
+}
+
+function updateGenCard(){
+  const resolved = getResolvedRows();
+  const genCard = document.getElementById('genCard');
+  if(resolved.length === 0){
+    genCard.style.display = 'none';
+    return;
+  }
+  genCard.style.display = 'block';
+  document.getElementById('sumCount').textContent = resolved.length;
+  document.getElementById('sumTotal').textContent = resolved.reduce((s,r)=>s+r.amount,0).toFixed(2).replace('.',',') + ' €';
+}
+
+function generateXml(){
+  const genMsg = document.getElementById('genMsg');
+  const dbtrName = document.getElementById('dbtrName').value.trim();
+  const dbtrIban = cleanIban(document.getElementById('dbtrIban').value);
+  const dbtrBic = document.getElementById('dbtrBic').value.trim().toUpperCase();
+  const execDate = document.getElementById('execDate').value;
+
+  if(!dbtrName || !isValidIban(dbtrIban) || !dbtrBic || !execDate){
+    genMsg.innerHTML = '<div class="msg err">Renseigne le nom, l\'IBAN valide, le BIC et la date d\'exécution du compte donneur d\'ordre (onglet Compte) avant de générer.</div>';
+    return;
+  }
+
+  const rows = getResolvedRows();
+  if(rows.length === 0){
+    genMsg.innerHTML = '<div class="msg err">Aucune ligne prête à exporter.</div>';
+    return;
+  }
+
+  const msgId = genMsgId();
+  const total = rows.reduce((s,r)=>s+r.amount,0).toFixed(2);
+  const nbTx = rows.length;
+
+  let txBlocks = rows.map((r, i) => `
+    <CdtTrfTxInf>
+      <PmtId>
+        <EndToEndId>${msgId}-${i+1}</EndToEndId>
+      </PmtId>
+      <Amt>
+        <InstdAmt Ccy="EUR">${r.amount.toFixed(2)}</InstdAmt>
+      </Amt>
+      <Cdtr>
+        <Nm>${xmlEscape(r.name)}</Nm>
+      </Cdtr>
+      <CdtrAcct>
+        <Id><IBAN>${r.iban}</IBAN></Id>
+      </CdtrAcct>
+      <RmtInf>
+        <Ustrd>${xmlEscape(r.ref || r.name)}</Ustrd>
+      </RmtInf>
+    </CdtTrfTxInf>`).join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>${msgId}</MsgId>
+      <CreDtTm>${isoNow()}</CreDtTm>
+      <NbOfTxs>${nbTx}</NbOfTxs>
+      <CtrlSum>${total}</CtrlSum>
+      <InitgPty>
+        <Nm>${xmlEscape(dbtrName)}</Nm>
+      </InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>${msgId}-PMT</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <NbOfTxs>${nbTx}</NbOfTxs>
+      <CtrlSum>${total}</CtrlSum>
+      <PmtTpInf>
+        <SvcLvl><Cd>SEPA</Cd></SvcLvl>
+      </PmtTpInf>
+      <ReqdExctnDt>${execDate}</ReqdExctnDt>
+      <Dbtr>
+        <Nm>${xmlEscape(dbtrName)}</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id><IBAN>${dbtrIban}</IBAN></Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId><BIC>${dbtrBic}</BIC></FinInstnId>
+      </DbtrAgt>
+      <ChrgBr>SLEV</ChrgBr>${txBlocks}
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>`;
+
+  const blob = new Blob([xml], {type: 'application/xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `virements-sepa-${dateStr}.xml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  genMsg.innerHTML = `<div class="msg ok">Fichier généré : ${nbTx} virement(s) pour un total de ${parseFloat(total).toFixed(2).replace('.',',')} €. Importe-le dans SG Entreprises via "Virements → Import de fichier".</div>`;
+}
+
+initAuth();
+</script>
+</body>
+</html>
