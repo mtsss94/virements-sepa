@@ -389,14 +389,32 @@ async function updateSupplier(id, field, value){
   if(field === 'iban') value = cleanIban(value);
   if(field === 'bic') value = value.trim().toUpperCase();
   const msgEl = document.getElementById('annuaireMsg');
+
+  if(field === 'iban'){
+    const duplicate = suppliers.find(s => s.id !== id && cleanIban(s.iban) === value);
+    if(duplicate){
+      msgEl.innerHTML = `<div class="msg err">Cet IBAN est déjà utilisé par "${escapeHtml(duplicate.name)}". Modification annulée.</div>`;
+      renderAnnuaire();
+      return;
+    }
+  }
+
   try{
     const { error } = await supabaseClient.from('fournisseurs').update({ [field]: value }).eq('id', id);
-    if(error) throw error;
+    if(error){
+      if(error.code === '23505'){
+        msgEl.innerHTML = '<div class="msg err">Cet IBAN est déjà utilisé par un autre fournisseur.</div>';
+        renderAnnuaire();
+        return;
+      }
+      throw error;
+    }
     const s = suppliers.find(x=>x.id===id);
     if(s) s[field] = value;
     msgEl.innerHTML = '<div class="msg ok">Fournisseur mis à jour.</div>';
   }catch(e){
     msgEl.innerHTML = `<div class="msg err">Échec de la mise à jour : ${escapeHtml(e.message)}</div>`;
+    renderAnnuaire();
   }
 }
 
@@ -422,13 +440,24 @@ async function addSupplier(){
     msgEl.innerHTML = '<div class="msg err">Nom et IBAN valide requis.</div>';
     return;
   }
+  const duplicate = suppliers.find(s => cleanIban(s.iban) === iban);
+  if(duplicate){
+    msgEl.innerHTML = `<div class="msg err">Cet IBAN est déjà enregistré pour "${escapeHtml(duplicate.name)}". Modifie ce fournisseur existant plutôt que d'en créer un nouveau.</div>`;
+    return;
+  }
   try{
     const { data, error } = await supabaseClient
       .from('fournisseurs')
       .insert({ name, iban, bic, user_id: currentUser.id })
       .select()
       .single();
-    if(error) throw error;
+    if(error){
+      if(error.code === '23505'){
+        msgEl.innerHTML = '<div class="msg err">Cet IBAN est déjà enregistré pour un autre fournisseur.</div>';
+        return;
+      }
+      throw error;
+    }
     suppliers.push(data);
     document.getElementById('newName').value = '';
     document.getElementById('newIban').value = '';
